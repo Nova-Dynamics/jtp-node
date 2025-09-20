@@ -276,7 +276,6 @@ encoder.encode_message(Buffer.from('Message 3'), 1);
 // Process all packets at once
 await decoder.decode_packets_batch(packets, 10);
 ```
-```
 
 ## Protocol Details
 
@@ -304,7 +303,7 @@ await decoder.decode_packets_batch(packets, 10);
 
 ### Fragmentation
 
-- Maximum payload per packet: 1200 bytes (configurable)
+- Maximum payload per packet: 1200 bytes (the maximum will be achieved for all non-terminal fragments)
 - Large messages automatically fragmented
 - Maximum 65,535 fragments per message
 - Fragments can arrive out of order
@@ -316,57 +315,11 @@ await decoder.decode_packets_batch(packets, 10);
 - Automatic wraparound handling
 - Assumes messages within 32768 IDs are in sequence
 
-## Architecture Benefits
-
-The stream-style event-driven architecture provides several advantages:
-
-- **🎯 Reactive Programming**: Built on EventEmitter for clean async patterns
-- **🔍 Efficient Filtering**: Message type and source ID filtering at the packet level
-- **🚀 Better Performance**: Non-blocking event-driven processing
-- **🧹 Cleaner API**: Intuitive method names and consistent event patterns
-- **📊 Independent Streams**: Multiple decoders can handle different message types independently
-- **⚡ Async-Friendly**: Support for both event-driven and callback patterns
-
 ## Testing
 
 ```bash
 npm test              # Run tests
 npm run test:watch    # Run tests in watch mode
-```
-
-## Migration from v1.x
-
-The v2.0 release includes breaking changes for a cleaner, more intuitive API:
-
-### Constructor Changes
-```javascript
-// Old (v1.x)
-const encoder = new JTPEncoder(ssrc);
-const decoder = new JTPDecoder(ssrc, packet_types);
-
-// New (v2.0+)
-const encoder = new JTPEncoder({ source_id: ssrc });
-const decoder = new JTPDecoder({ source_id: ssrc, message_types: packet_types });
-```
-
-### Method Changes
-```javascript
-// Old (v1.x)
-for await (const packet of encoder.packetize(buffer, type)) { ... }
-decoder.ingest_packet(packet);
-
-// New (v2.0+)
-encoder.encode_message(buffer, type);
-decoder.decode_packet(packet);
-```
-
-### Event Changes
-```javascript
-// Old (v1.x)
-decoder.on('data', (buffer, packet_type, metadata) => { ... });
-
-// New (v2.0+)
-decoder.on('message', (buffer, message_type, metadata) => { ... });
 ```
 
 ## License
