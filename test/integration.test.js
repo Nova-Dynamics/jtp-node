@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Integration test suite for JTP Encoder and Decoder
+ * @author JTP Library
+ * @version 1.0.0
+ */
+
 const { expect } = require('chai');
 const JTPEncoder = require('../lib/Encoder');
 const JTPDecoder = require('../lib/Decoder');

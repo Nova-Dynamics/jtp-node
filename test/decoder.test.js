@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Test suite for JTPDecoder class
+ * @author JTP Library
+ * @version 1.0.0
+ */
+
 const { expect } = require('chai');
 const JTPDecoder = require('../lib/Decoder');
 const JTPEncoder = require('../lib/Encoder');
@@ -534,7 +540,17 @@ describe('JTPDecoder', function() {
     });
 });
 
-// Helper function to create valid JTP packets
+/**
+ * Helper function to create valid JTP packets for testing
+ * @param {Object} options - Packet creation options
+ * @param {number} options.source_id - Source ID for the packet
+ * @param {number} options.message_type - Message type (0-63)
+ * @param {number} options.message_id - Message ID
+ * @param {number} options.fragment_index - Fragment index
+ * @param {number} options.fragment_count - Total fragment count
+ * @param {Buffer} options.payload - Payload data
+ * @returns {Buffer} Valid JTP packet buffer
+ */
 function createValidPacket({ source_id, message_type, message_id, fragment_index, fragment_count, payload }) {
     const header_size = 12;
     const packet = Buffer.allocUnsafe(header_size + payload.length);

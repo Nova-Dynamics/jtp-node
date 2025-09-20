@@ -4,15 +4,21 @@
   "main": "index.js",
   "scripts": {
     "test": "mocha test/**/*.test.js",
-    "test:watch": "mocha test/**/*.test.js --watch",
-    "example": "node example.js"
+    "test:watch": "mocha test/**/*.test.js --watch"
   },
-  "keywords": ["udp", "protocol", "streaming", "fragmentation", "jtp", "transfer"],
+  "keywords": [
+    "udp",
+    "protocol",
+    "streaming",
+    "fragmentation",
+    "jtp",
+    "transfer"
+  ],
   "author": "",
   "license": "ISC",
   "description": "JTP - Janky Transfer Protocol: A UDP protocol for streaming variable-length data with automatic fragmentation",
   "devDependencies": {
-    "mocha": "^10.2.0",
-    "chai": "^4.3.8"
+    "chai": "^4.3.8",
+    "mocha": "^10.2.0"
   }
 }

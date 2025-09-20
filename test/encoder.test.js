@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Test suite for JTPEncoder class
+ * @author JTP Library
+ * @version 1.0.0
+ */
+
 const { expect } = require('chai');
 const JTPEncoder = require('../lib/Encoder');
 const { VERSION, MAGIC_BYTE, MAX_PAYLOAD_SIZE } = require('../lib/constants');
