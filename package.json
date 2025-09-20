@@ -2,6 +2,11 @@
   "name": "jtp",
   "version": "1.0.0",
   "main": "index.js",
+  "files": [
+    "index.js",
+    "lib/",
+    "README.md"
+  ],
   "scripts": {
     "test": "mocha test/**/*.test.js",
     "test:watch": "mocha test/**/*.test.js --watch"
@@ -17,6 +22,14 @@
   "author": "",
   "license": "ISC",
   "description": "JTP - Janky Transfer Protocol: A UDP protocol for streaming variable-length data with automatic fragmentation",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Nova-Dynamics/jtp-node.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Nova-Dynamics/jtp-node/issues"
+  },
+  "homepage": "https://github.com/Nova-Dynamics/jtp-node#readme",
   "devDependencies": {
     "chai": "^4.3.8",
     "mocha": "^10.2.0"
