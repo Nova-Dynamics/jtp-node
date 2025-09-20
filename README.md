@@ -1,15 +1,17 @@
 # JTP - Janky Transfer Protocol
 
-A Node.js library implementing JTP (Janky Transfer Protocol), a UDP-based protocol for streaming variable-length data with automatic fragmentation. Think of it as RTP, but optimized for variable-length payloads instead of fixed-size frames.
+A Node.js library implementing JTP (Janky Transfer Protocol), a UDP-based protocol for streaming variable-length data with automatic fragmentation and reassembly. Features a clean, stream-style API built on EventEmitter for reactive programming.
 
 ## Features
 
+- **Stream-Style API**: Event-driven encoder and decoder with intuitive method names
 - **Automatic Fragmentation**: Large payloads are automatically split into fragments that fit within UDP packet size limits
-- **Multiple Packet Types**: Support for up to 64 different packet types (0-63) with independent message streams
-- **Packet Type Filtering**: Decoders can filter for specific packet types at the packet level
+- **Multiple Message Types**: Support for up to 64 different message types (0-63) with independent message streams
+- **Message Type Filtering**: Decoders can filter for specific message types at the packet level
 - **Generic Payload Support**: Works with any Buffer data - no schema required
-- **Event-Driven**: Built on EventEmitter for reactive programming
-- **SSRC Filtering**: Source identification for multi-source environments
+- **Event-Driven Architecture**: Built on EventEmitter for reactive programming patterns
+- **Source Identification**: Source ID filtering for multi-source environments
+- **Async-Friendly**: Support for callbacks and event-based flow control
 
 ## Installation
 
@@ -22,222 +24,258 @@ npm install jtp
 ```javascript
 const { JTPEncoder, JTPDecoder } = require('jtp');
 
-// Create encoder and decoder with the same SSRC
-const ssrc = 0x12345678;
-const encoder = new JTPEncoder(ssrc);
-const decoder = new JTPDecoder(ssrc);
+// Create encoder and decoder with the same source ID
+const encoder = new JTPEncoder({ source_id: 0x1234 });
+const decoder = new JTPDecoder({ source_id: 0x1234 });
 
-// Set up decoder
-decoder.on('data', (buffer, packet_type, metadata) => {
-    console.log(`Received ${buffer.length} bytes of type ${packet_type}`);
-    console.log(`Data: ${buffer.toString()}`);
+// Set up decoder events
+decoder.on('message', (buffer, message_type, metadata) => {
+    console.log(`Received complete message:
+        Type: ${message_type}
+        Message ID: ${metadata.message_id}
+        Size: ${metadata.total_bytes} bytes
+        Content: ${buffer.toString()}`);
 });
 
-// Send data
-async function sendData() {
-    const message = Buffer.from('Hello, JTP!');
-    const packet_type = 1;
+// Set up encoder events
+encoder.on('packet', (packet_buffer, packet_info) => {
+    console.log(`Generated packet ${packet_info.fragment_number}/${packet_info.fragment_count}`);
     
-    for await (const packet of encoder.packetize(message, packet_type)) {
-        // Send packet over UDP
-        decoder.ingest_packet(packet); // Or send via actual UDP socket
-    }
-}
-
-sendData();
-```
-
-## Filtered Decoders
-
-```javascript
-// Create decoders that only listen to specific packet types
-const control_decoder = new JTPDecoder(ssrc, [1, 2, 3]); // Only control messages
-const data_decoder = new JTPDecoder(ssrc, [10, 11, 12]); // Only data messages
-
-control_decoder.on('data', (buffer, packet_type) => {
-    console.log(`Control message type ${packet_type}: ${buffer.toString()}`);
+    // Send packet over UDP (or pass directly to decoder for testing)
+    decoder.decode_packet(packet_buffer);
 });
 
-data_decoder.on('data', (buffer, packet_type) => {
-    console.log(`Data message type ${packet_type}: ${buffer.length} bytes`);
+encoder.on('message:encoded', (encoding_info) => {
+    console.log(`Message ${encoding_info.message_id} encoded into ${encoding_info.fragment_count} packets`);
 });
 
-// Send different packet types
-for await (const packet of encoder.packetize(Buffer.from('SYSTEM_READY'), 1)) {
-    control_decoder.ingest_packet(packet); // Will receive
-    data_decoder.ingest_packet(packet);    // Will be filtered out
-}
-
-for await (const packet of encoder.packetize(Buffer.from('sensor data'), 10)) {
-    control_decoder.ingest_packet(packet); // Will be filtered out
-    data_decoder.ingest_packet(packet);    // Will receive
-}
+// Encode and send a message
+const message_id = encoder.encode_message(Buffer.from('Hello, JTP!'), 1);
+console.log(`Encoding message ${message_id}`);
 ```
 
 ## API Reference
 
 ### JTPEncoder
 
+The encoder converts messages into JTP packets and emits them as events.
+
 #### Constructor
 
 ```javascript
-const encoder = new JTPEncoder(ssrc)
+const encoder = new JTPEncoder({ source_id });
 ```
 
-- `ssrc` (number): 32-bit source identifier
-
-#### Static Properties
-
-- `JTPEncoder.VERSION`: Protocol version (currently 0)
-- `JTPEncoder.MAX_PAYLOAD_SIZE`: Maximum payload size per packet (1200 bytes)
+**Parameters:**
+- `source_id` (number): 32-bit source identifier (0x00000000 to 0xFFFFFFFF)
 
 #### Methods
 
-##### `packetize(payload_buffer, packet_type)`
+##### `encode_message(message_buffer, message_type, callback?)`
 
-Asynchronous generator that yields UDP packets for the given data.
+Encodes a message and emits packets via events.
 
+**Parameters:**
+- `message_buffer` (Buffer): The message data to encode
+- `message_type` (number): Message type (0-63)
+- `callback` (function, optional): Called when encoding completes `(error, result) => {}`
+
+**Returns:** `number` - The message ID assigned to this message
+
+**Events Emitted:**
+- `packet`: For each packet generated
+- `message:encoded`: When all packets for the message have been emitted
+- `error`: If encoding fails
+
+#### Events
+
+##### `'packet'` Event
 ```javascript
-const buffer = Buffer.from('Your data here');
-const packet_type = 5;
-
-for await (const packet of encoder.packetize(buffer, packet_type)) {
-    // Send packet over UDP
-    udpSocket.send(packet, port, host);
-}
+encoder.on('packet', (packet_buffer, packet_info) => {
+    // packet_buffer: Buffer containing the JTP packet
+    // packet_info: { message_id, fragment_number, fragment_count }
+});
 ```
 
-- `payload_buffer` (Buffer): The data to send
-- `packet_type` (number): Packet type (0-63)
-- Returns: AsyncGenerator<Buffer>
-
-##### `packetize_all(payload_buffer, packet_type)`
-
-Convenience method that returns all packets as an array.
-
+##### `'message:encoded'` Event
 ```javascript
-const packets = await encoder.packetize_all(buffer, packet_type);
-packets.forEach(packet => udpSocket.send(packet, port, host));
+encoder.on('message:encoded', (encoding_info) => {
+    // encoding_info: { message_id, fragment_count }
+});
+```
+
+##### `'error'` Event
+```javascript
+encoder.on('error', (error) => {
+    // error: Error object describing what went wrong
+});
 ```
 
 ### JTPDecoder
 
+The decoder receives JTP packets and reconstructs complete messages.
+
 #### Constructor
 
 ```javascript
-const decoder = new JTPDecoder(ssrc, packet_types = null)
+const decoder = new JTPDecoder({ source_id, message_types });
 ```
 
-- `ssrc` (number): 32-bit source identifier to listen for
-- `packet_types` (Array<number>, optional): Array of packet types to accept. If null, accepts all types.
-
-#### Static Properties
-
-- `JTPDecoder.VERSION`: Protocol version (currently 0)
-- `JTPDecoder.MAX_PAYLOAD_SIZE`: Maximum payload size per packet (1200 bytes)
+**Parameters:**
+- `source_id` (number): 32-bit source identifier to listen for
+- `message_types` (array, optional): Array of message types to accept (default: all types)
 
 #### Methods
 
-##### `ingest_packet(packet)`
+##### `decode_packet(packet_buffer)`
 
-Process a received UDP packet. Synchronous.
+Process a single JTP packet.
 
-```javascript
-udpSocket.on('message', (packet) => {
-    decoder.ingest_packet(packet);
-});
-```
+**Parameters:**
+- `packet_buffer` (Buffer): JTP packet to decode
 
-##### `ingest_packet_async(packet)`
+##### `decode_packet_async(packet_buffer)`
 
-Process a received UDP packet asynchronously (yields to event loop).
+Asynchronously process a JTP packet (yields control for large messages).
 
-```javascript
-udpSocket.on('message', async (packet) => {
-    await decoder.ingest_packet_async(packet);
-});
-```
+**Parameters:**
+- `packet_buffer` (Buffer): JTP packet to decode
 
-##### `ingest_packets_batch(packets, batch_size = 50)`
+##### `decode_packets_batch(packets, batch_size?)`
 
-Process multiple packets in batches to avoid blocking the event loop.
+Process multiple packets in batches without blocking the event loop.
 
-```javascript
-await decoder.ingest_packets_batch(packet_array, 50);
-```
+**Parameters:**
+- `packets` (Buffer[]): Array of packets to process
+- `batch_size` (number, optional): Batch size (default: 50)
 
-##### `reset_accumulator(packet_type = null)`
+##### `reset_message_state(message_type)`
 
-Clear message accumulator(s).
+Reset the message accumulator for a specific message type.
 
-```javascript
-decoder.reset_accumulator();      // Clear all
-decoder.reset_accumulator(5);     // Clear specific packet type
-```
+**Parameters:**
+- `message_type` (number): Message type to reset
 
 #### Events
 
-##### `data`
-
-Emitted when a complete message is received.
-
+##### `'message'` Event
 ```javascript
-decoder.on('data', (buffer, packet_type, metadata) => {
-    // buffer: Buffer containing the complete message
-    // packet_type: number (0-63)
+decoder.on('message', (message_buffer, message_type, metadata) => {
+    // message_buffer: Buffer containing the complete message
+    // message_type: Number indicating the message type (0-63)
     // metadata: { message_id, fragment_count, total_bytes }
 });
 ```
 
-##### `message_start`
-
-Emitted when the first fragment of a new message is received.
-
+##### `'fragment:received'` Event
 ```javascript
-decoder.on('message_start', ({ packet_type, message_id, fragment_count }) => {
-    console.log(`Starting message ${message_id} with ${fragment_count} fragments`);
+decoder.on('fragment:received', (fragment_info) => {
+    // fragment_info: { 
+    //   message_type, 
+    //   message_id, 
+    //   fragment_number, 
+    //   fragment_count 
+    // }
 });
 ```
 
-##### `fragment_received`
-
-Emitted when each fragment is received.
-
+##### `'message:complete'` Event
 ```javascript
-decoder.on('fragment_received', ({ packet_type, message_id, fragment_index, fragment_count, fragments_received }) => {
-    console.log(`Fragment ${fragment_index}/${fragment_count - 1} received`);
+decoder.on('message:complete', (completion_info) => {
+    // completion_info: { 
+    //   message_type, 
+    //   message_id, 
+    //   fragment_count, 
+    //   total_bytes 
+    // }
 });
 ```
 
-##### `message_complete`
-
-Emitted when a message is fully reassembled.
-
+##### `'message:incomplete'` Event
 ```javascript
-decoder.on('message_complete', ({ packet_type, message_id, fragment_count, total_bytes }) => {
-    console.log(`Message ${message_id} complete: ${total_bytes} bytes`);
+decoder.on('message:incomplete', (incomplete_info) => {
+    // incomplete_info: { 
+    //   message_type, 
+    //   message_id, 
+    //   fragments_received, 
+    //   fragment_count 
+    // }
 });
 ```
 
-##### `message_incomplete`
-
-Emitted when a newer message starts before the previous one is complete.
-
-```javascript
-decoder.on('message_incomplete', ({ packet_type, message_id, fragments_received, fragment_count }) => {
-    console.log(`Message ${message_id} incomplete: ${fragments_received}/${fragment_count}`);
-});
-```
-
-##### `error`
-
-Emitted on protocol errors.
-
+##### `'error'` Event
 ```javascript
 decoder.on('error', (error) => {
-    console.error('JTP Error:', error.message);
+    // error: Error object describing what went wrong
 });
 ```
+
+## Message Type Filtering
+
+```javascript
+## Message Type Filtering
+
+You can create decoders that only listen to specific message types for more efficient processing:
+
+```javascript
+const { JTPEncoder, JTPDecoder } = require('jtp');
+
+// Create decoders that filter for specific message types
+const encoder = new JTPEncoder({ source_id: 0x1234 });
+const control_decoder = new JTPDecoder({ source_id: 0x1234, message_types: [1, 2, 3] }); // Only control messages
+const data_decoder = new JTPDecoder({ source_id: 0x1234, message_types: [10, 11, 12] }); // Only data messages
+
+control_decoder.on('message', (buffer, message_type) => {
+    console.log(`Control message type ${message_type}: ${buffer.toString()}`);
+});
+
+data_decoder.on('message', (buffer, message_type) => {
+    console.log(`Data message type ${message_type}: ${buffer.length} bytes`);
+});
+
+// Send different message types
+encoder.on('packet', (packet) => {
+    control_decoder.decode_packet(packet); // Filtered by message type
+    data_decoder.decode_packet(packet);    // Filtered by message type
+});
+
+encoder.encode_message(Buffer.from('SYSTEM_READY'), 1);  // Control decoder will receive
+encoder.encode_message(Buffer.from('sensor data'), 10); // Data decoder will receive
+```
+
+## Advanced Usage
+
+### Using Callbacks
+
+```javascript
+const message_id = encoder.encode_message(large_buffer, 5, (error, result) => {
+    if (error) {
+        console.error('Encoding failed:', error.message);
+    } else {
+        console.log(`Message ${result.message_id} encoded into ${result.fragment_count} packets`);
+    }
+});
+```
+
+### Batch Processing
+
+```javascript
+// Collect packets for batch processing
+const packets = [];
+encoder.on('packet', (packet_buffer) => {
+    packets.push(packet_buffer);
+});
+
+// Encode multiple messages
+encoder.encode_message(Buffer.from('Message 1'), 1);
+encoder.encode_message(Buffer.from('Message 2'), 1);
+encoder.encode_message(Buffer.from('Message 3'), 1);
+
+// Process all packets at once
+await decoder.decode_packets_batch(packets, 10);
+```
+```
+
 ## Protocol Details
 
 ### Header Format (12 bytes)
@@ -247,7 +285,7 @@ decoder.on('error', (error) => {
  +---------+---------+---------+---------+---------+---------+
  |  Magic  |Ver|Type |    Message ID     |    Fragment Idx   |
  +---------+---------+---------+---------+---------+---------+
- |    Fragment Cnt   |                  SSRC                 |
+ |    Fragment Cnt   |               Source ID               |
  +---------+---------+---------+---------+---------+---------+
  |                                                           |
  |                          Payload                          |
@@ -256,15 +294,15 @@ decoder.on('error', (error) => {
 ```
 
 - **Magic** (1 byte): 0x4A ("J" in ASCII)
-- **Ver|Type** (1 byte): Version (2 bits) + Packet Type (6 bits)
+- **Ver|Type** (1 byte): Version (2 bits) + Message Type (6 bits)  
 - **Message ID** (2 bytes): Unique per logical message
 - **Fragment Idx** (2 bytes): Index of this fragment (0-based)
 - **Fragment Cnt** (2 bytes): Total number of fragments
-- **SSRC** (4 bytes): Source identifier
+- **Source ID** (4 bytes): Source identifier
 
 ### Fragmentation
 
-- Maximum payload per packet: 1200 bytes
+- Maximum payload per packet: 1200 bytes (configurable)
 - Large messages automatically fragmented
 - Maximum 65,535 fragments per message
 - Fragments can arrive out of order
@@ -278,28 +316,65 @@ decoder.on('error', (error) => {
 
 ## Architecture Benefits
 
-The split architecture provides several advantages over a monolithic stream class:
+The stream-style event-driven architecture provides several advantages:
 
-- **🎯 Focused Responsibility**: Encoder only handles packetization, Decoder only handles reassembly
-- **🔍 Efficient Filtering**: Packet type and SSRC filtering at the packet level
-- **🚀 Better Performance**: No need to process unwanted packet types
-- **🧹 Cleaner API**: Clear separation between sending and receiving logic
+- **🎯 Reactive Programming**: Built on EventEmitter for clean async patterns
+- **🔍 Efficient Filtering**: Message type and source ID filtering at the packet level
+- **🚀 Better Performance**: Non-blocking event-driven processing
+- **🧹 Cleaner API**: Intuitive method names and consistent event patterns
 - **📊 Independent Streams**: Multiple decoders can handle different message types independently
+- **⚡ Async-Friendly**: Support for both event-driven and callback patterns
 
 ## Examples
 
 See `example.js` for a complete demonstration including:
 - Single packet messages
-- Multi-fragment messages  
-- Multiple packet types with filtering
-- Multiple SSRCs (sources)
-- Split architecture usage patterns
+- Multi-fragment messages with callbacks
+- Event-driven packet handling
+- Message type filtering
+- Batch processing
+- Error handling patterns
 
 ## Testing
 
 ```bash
 npm test              # Run tests
 npm run test:watch    # Run tests in watch mode
+```
+
+## Migration from v1.x
+
+The v2.0 release includes breaking changes for a cleaner, more intuitive API:
+
+### Constructor Changes
+```javascript
+// Old (v1.x)
+const encoder = new JTPEncoder(ssrc);
+const decoder = new JTPDecoder(ssrc, packet_types);
+
+// New (v2.0+)
+const encoder = new JTPEncoder({ source_id: ssrc });
+const decoder = new JTPDecoder({ source_id: ssrc, message_types: packet_types });
+```
+
+### Method Changes
+```javascript
+// Old (v1.x)
+for await (const packet of encoder.packetize(buffer, type)) { ... }
+decoder.ingest_packet(packet);
+
+// New (v2.0+)
+encoder.encode_message(buffer, type);
+decoder.decode_packet(packet);
+```
+
+### Event Changes
+```javascript
+// Old (v1.x)
+decoder.on('data', (buffer, packet_type, metadata) => { ... });
+
+// New (v2.0+)
+decoder.on('message', (buffer, message_type, metadata) => { ... });
 ```
 
 ## License
